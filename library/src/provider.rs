@@ -9,8 +9,8 @@ pub struct Ed25519Provider {
 
 impl Ed25519Provider {
     pub fn new() -> Self {
-        Self { 
-            private_key: [0u8; 32] // Default/placeholder key
+        Self {
+            private_key: [0u8; 32], // Default/placeholder key
         }
     }
 

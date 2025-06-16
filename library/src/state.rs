@@ -1,6 +1,6 @@
 use malachite_core_types::Round;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -38,7 +38,7 @@ impl State {
             address,
             current_height: Height::default(),
             current_round: Round::Nil,
-            current_proposer: None, 
+            current_proposer: None,
             current_role: Role::None,
             peers: HashSet::new(),
             store: Store::new(),

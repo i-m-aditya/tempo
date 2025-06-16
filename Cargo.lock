@@ -4419,6 +4419,8 @@ dependencies = [
 name = "library"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
  "alloy-genesis",
  "alloy-primitives",
  "clap",
@@ -4448,6 +4450,7 @@ dependencies = [
  "reth-tracing",
  "reth-trie-db",
  "serde",
+ "tokio",
  "tracing",
 ]
 
