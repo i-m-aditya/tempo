@@ -181,6 +181,10 @@ impl ValueIdWrapper {
     pub fn new(data: Vec<u8>) -> Self {
         Self(data)
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 impl MalachiteValue for BaseValue {
