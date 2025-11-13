@@ -780,7 +780,7 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
         let mut level = self.get_best_price_level(book_key, bid)?;
         let mut order = self.sload_orders(level.head)?;
 
-        let mut total_amount_in = 0;
+        let mut total_amount_in: u128 = 0;
         while amount_out > 0 {
             let price = tick_to_price(order.tick());
             let fill_amount = amount_out.min(order.remaining());
@@ -793,7 +793,10 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
                     .expect("Input needed calculation overflow")
             };
 
-            if total_amount_in + amount_in > max_amount_in {
+            // Pre-Moderato: Check maxIn on each iteration for consensus compatibility
+            if self.storage.spec() < TempoHardfork::Moderato
+                && total_amount_in + amount_in > max_amount_in
+            {
                 return Err(StablecoinExchangeError::max_input_exceeded().into());
             }
 
@@ -866,7 +869,8 @@ impl<'a, S: PrecompileStorageProvider> StablecoinExchange<'a, S> {
             }
         }
 
-        if total_amount_out < min_amount_out {
+        // Pre-Moderato: Check min out after filling the full amount in
+        if self.storage.spec() < TempoHardfork::Moderato && total_amount_out < min_amount_out {
             return Err(StablecoinExchangeError::insufficient_output().into());
         }
 
@@ -3414,6 +3418,51 @@ mod tests {
     }
 
     #[test]
+    fn test_max_in_check_pre_moderato() -> eyre::Result<()> {
+        let mut storage = HashMapStorageProvider::new(1);
+        let mut exchange = StablecoinExchange::new(&mut storage);
+        exchange.initialize()?;
+
+        let alice = Address::random();
+        let bob = Address::random();
+        let admin = Address::random();
+
+        let (base_token, quote_token) = setup_test_tokens(
+            exchange.storage,
+            admin,
+            alice,
+            exchange.address,
+            200_000_000u128,
+        );
+        exchange.create_pair(base_token)?;
+
+        let tick_50 = 50i16;
+        let tick_100 = 100i16;
+        let order_amount = MIN_ORDER_AMOUNT;
+
+        exchange.place(alice, base_token, order_amount, false, tick_50)?;
+        exchange.place(alice, base_token, order_amount, false, tick_100)?;
+        exchange.execute_block(Address::ZERO)?;
+
+        exchange.set_balance(bob, quote_token, 200_000_000u128)?;
+
+        let price_50 = orderbook::tick_to_price(tick_50);
+        let quote_for_first = (order_amount * price_50 as u128) / orderbook::PRICE_SCALE as u128;
+        let max_in_between = quote_for_first + 500;
+
+        let result = exchange.swap_exact_amount_out(
+            bob,
+            quote_token,
+            base_token,
+            order_amount + 999,
+            max_in_between,
+        );
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
     fn test_create_pair_rejects_non_tip20_base_post_moderato() -> eyre::Result<()> {
         // Test with Moderato hardfork (validation should be enforced)
         let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Moderato);
@@ -3437,6 +3486,53 @@ mod tests {
                 StablecoinExchangeError::InvalidBaseToken(_)
             ))
         ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_max_in_check_post_moderato() -> eyre::Result<()> {
+        let mut storage = HashMapStorageProvider::new(1).with_spec(TempoHardfork::Moderato);
+        let mut exchange = StablecoinExchange::new(&mut storage);
+        exchange.initialize()?;
+
+        let alice = Address::random();
+        let bob = Address::random();
+        let admin = Address::random();
+
+        let (base_token, quote_token) = setup_test_tokens(
+            exchange.storage,
+            admin,
+            alice,
+            exchange.address,
+            200_000_000u128,
+        );
+        exchange.create_pair(base_token)?;
+
+        let tick_50 = 50i16;
+        let tick_100 = 100i16;
+        let order_amount = MIN_ORDER_AMOUNT;
+
+        exchange.place(alice, base_token, order_amount, false, tick_50)?;
+        exchange.place(alice, base_token, order_amount, false, tick_100)?;
+        exchange.execute_block(Address::ZERO)?;
+
+        exchange.set_balance(bob, quote_token, 200_000_000u128)?;
+
+        let price_50 = orderbook::tick_to_price(tick_50);
+        let price_100 = orderbook::tick_to_price(tick_100);
+        let quote_for_first = (order_amount * price_50 as u128) / orderbook::PRICE_SCALE as u128;
+        let quote_for_partial_second = (999 * price_100 as u128) / orderbook::PRICE_SCALE as u128;
+        let total_needed = quote_for_first + quote_for_partial_second;
+
+        let result = exchange.swap_exact_amount_out(
+            bob,
+            quote_token,
+            base_token,
+            order_amount + 999,
+            total_needed,
+        );
+        assert!(result.is_ok());
 
         Ok(())
     }
