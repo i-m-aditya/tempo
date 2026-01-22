@@ -36,7 +36,7 @@ where
         async move {
             tx_req.nonce = Some(nonce);
             tx_req.chain_id = Some(chain_id);
-            tx_req.gas = tx_req.gas.or(Some(400_000));
+            tx_req.gas = tx_req.gas.or(Some(5_000_000));
             tx_req.max_fee_per_gas = tx_req.max_fee_per_gas.or(Some(TEMPO_BASE_FEE as u128));
             tx_req.max_priority_fee_per_gas = tx_req
                 .max_priority_fee_per_gas
@@ -115,7 +115,7 @@ async fn inject_non_payment_txs(
             .build()?;
         let mut tx = TxEip1559 {
             chain_id,
-            gas_limit: 21000,
+            gas_limit: 2_000_000,
             to: Address::ZERO.into(),
             max_fee_per_gas: TEMPO_BASE_FEE as u128,
             max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
@@ -154,7 +154,7 @@ where
         let mut tx_request = transfer_tx.into_transaction_request();
         tx_request.nonce = Some(current_nonce + i as u64);
         tx_request.chain_id = Some(chain_id);
-        tx_request.gas = Some(100_000);
+        tx_request.gas = Some(1_000_000);
         tx_request.max_fee_per_gas = Some(TEMPO_BASE_FEE as u128);
         tx_request.max_priority_fee_per_gas = Some(TEMPO_BASE_FEE as u128);
 
@@ -354,7 +354,7 @@ async fn test_block_building_only_non_payment_txs() -> eyre::Result<()> {
         let raw_tx = {
             let mut tx = TxEip1559 {
                 chain_id,
-                gas_limit: 21000,
+                gas_limit: 2_000_000,
                 to: Address::ZERO.into(),
                 max_fee_per_gas: TEMPO_BASE_FEE as u128,
                 max_priority_fee_per_gas: TEMPO_BASE_FEE as u128,
@@ -402,9 +402,12 @@ async fn test_block_building_only_non_payment_txs() -> eyre::Result<()> {
 async fn test_block_building_more_txs_than_fit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Use lower gas limit to ensure transactions overflow to multiple blocks
+    // Use a gas limit high enough for token setup (~5M per token) but low enough
+    // to cause overflow when many transactions are injected.
+    // With T1 gas costs, we need at least 5M for token creation.
+    // 15M allows setup but forces overflow when 330 transactions are submitted.
     let mut setup = crate::utils::TestNodeBuilder::new()
-        .with_gas_limit("0xf4240") // 1,000,000 gas
+        .with_gas_limit("0xE4E1C0") // 15,000,000 gas
         .build_with_node_access()
         .await?;
 
