@@ -264,6 +264,13 @@ contract TIP20FactoryInvariantTest is InvariantBaseTest {
         // Get or create a EUR token to use as quote
         try factory.getTokenAddress(actor, eurSalt) returns (address predictedEurAddr) {
             if (predictedEurAddr.code.length != 0) {
+                // Verify the existing token is actually a EUR token (not some other token
+                // that happened to be created at this address by another handler)
+                if (keccak256(bytes(TIP20(predictedEurAddr).currency())) != keccak256(bytes("EUR")))
+                {
+                    // Token exists but is not EUR - skip this test case
+                    return;
+                }
                 eurToken = predictedEurAddr;
             } else {
                 vm.startPrank(actor);
@@ -373,12 +380,19 @@ contract TIP20FactoryInvariantTest is InvariantBaseTest {
             // Check AMM address - should NOT be TIP20
             assertFalse(factory.isTIP20(address(amm)), "TEMPO-FAC8: AMM should not be TIP20");
         } else {
-            // Check a random address - exclude known TIP20s
+            // Check a random address - exclude known TIP20s and reserved range
             address checkAddr = address(uint160(addrSeed));
+
+            // Skip addresses in the reserved TIP20 range (prefix 0x20C0... with lower 64 bits < 1024)
+            // These addresses may have code from genesis/hardfork deployments
+            bool hasPrefix = bytes12(bytes20(checkAddr)) == bytes12(0x20c000000000000000000000);
+            uint64 lowerBytes = uint64(uint160(checkAddr));
+            bool isReserved = hasPrefix && lowerBytes < 1024;
+
             if (
                 !_isCreatedToken[checkAddr] && checkAddr != address(pathUSD)
                     && checkAddr != address(token1) && checkAddr != address(token2)
-                    && checkAddr != address(token3) && checkAddr != address(token4)
+                    && checkAddr != address(token3) && checkAddr != address(token4) && !isReserved
             ) {
                 assertFalse(
                     factory.isTIP20(checkAddr), "TEMPO-FAC8: Random address should not be TIP20"
